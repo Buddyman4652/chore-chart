@@ -501,7 +501,7 @@ button.gtotal{background:none;border:0;width:100%;font:inherit;color:inherit;cur
 </head><body>
 
 
-<div class="wrap"><div id="app"></div><p class="appver">Version 1.0 · saved on this iPad</p></div>
+<div class="wrap"><div id="app"></div><p class="appver">Version 1.1 · saved on this iPad</p></div>
 <div id="sheet" class="overlay" hidden></div>
 <div id="parent" class="overlay" hidden>
   <div class="ppanel">
@@ -1080,7 +1080,8 @@ function playBtn(k,g){
   if(!gamesOn()||!hasGame(k.id,g.id))return '';
   if(playedToday(k.id))return '';
   if(!allDoneToday(k))return '<p class="muted gplay-note">Finish all of today\'s chores to play.</p>';
-  const bm=bankedMins(k.id),mins=gameCfg().mins+bm;
+  const bm=bankedMins(k.id),lf=leftSecs(k.id),mins=(lf>0?'':gameCfg().mins+bm);
+  if(lf>0)return '<button type="button" class="btn primary gplay" data-act="play-game" data-kid="'+k.id+'" data-game="'+g.id+'">Play '+esc(g.name)+' · '+fmtLeft(lf)+' left</button>';
   return '<button type="button" class="btn primary gplay" data-act="play-game" data-kid="'+k.id+'" data-game="'+g.id+'">Play '+esc(g.name)+' · '+mins+' min</button>';
 }
 function gamesStrip(k){
@@ -1497,6 +1498,8 @@ function boxSec(){
 const gamesOn=()=>S.cfg.gamesOn!==false;
 const oncePerDay=()=>S.cfg.gameOnce!==false;
 const playedToday=kid=>oncePerDay()&&S.cfg['played_'+kid]===todayStr();
+const leftSecs=kid=>{if(!oncePerDay())return 0;const p=String(S.cfg['gl_'+kid]||'').split(':');return p[0]===todayStr()?Math.max(0,parseInt(p[1],10)||0):0};
+const fmtLeft=n=>Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
 function arStepper(key,val,step,min,max,txt,label){
   const a=(d,sym,al)=>'<button type="button" class="step" data-act="ar-step" data-key="'+key+'" data-d="'+d+'" data-min="'+min+'" data-max="'+max+'" aria-label="'+al+'">'+sym+'</button>';
   return '<div class="stepper">'+a(-step,'&minus;','Less')+'<output aria-label="'+label+'">'+txt+'</output>'+a(step,'+','More')+'</div>';
@@ -2079,17 +2082,18 @@ function arcadeStart(kidId,gameId){
   if(!k||gameId!=='bubble'||!window.BubblePop)return;
   if(!gamesOn()||!hasGame(k.id,gameId)||playedToday(k.id)||!allDoneToday(k)){toast('Not available right now.');return;}
   const banked=S.adjs.filter(a=>a.kid===kidId&&Number(a.playMins)>0&&a.used!==true);
-  const mins=gameCfg().mins+banked.reduce((t,a)=>t+Number(a.playMins),0);
+  const lf0=leftSecs(kidId);
+  const secs=(lf0>0?lf0:gameCfg().mins*60)+banked.reduce((t,a)=>t+Number(a.playMins),0)*60;
   safe(async()=>{
-    if(oncePerDay())await saveCfg({['played_'+kidId]:todayStr()});
+    if(oncePerDay())await saveCfg({['gl_'+kidId]:todayStr()+':'+(lf0>0?lf0:gameCfg().mins*60)});
     for(const a of banked)await db.collection('adjustments').doc(a.id).update({used:true});
   }).then(ok=>{
     if(!ok)return;
     closeSheet();
     const host=$('#arcade');host.hidden=false;syncLock();
-    window.BubblePop.start(host,{name:k.name,best:Number(S.cfg['hs_'+kidId+'_bubble'])||0,seconds:mins*60,sound:!muted(),
+    window.BubblePop.start(host,{name:k.name,best:Number(S.cfg['hs_'+kidId+'_bubble'])||0,seconds:secs,sound:!muted(),
       onSound:on=>lsSet('cc_mute',on?'0':'1'),
-      onEnd:score=>{host.hidden=true;host.innerHTML='';syncLock();const prev=Number(S.cfg['hs_'+kidId+'_bubble'])||0;if(score>prev){saveCfg({['hs_'+kidId+'_bubble']:score});toast('New best score: '+score+'!');}render();}});
+      onEnd:(score,left)=>{if(oncePerDay()){const base=lf0>0?lf0:gameCfg().mins*60,bonus=secs-base,rem=Math.min(base,Math.max(0,left-bonus));saveCfg(rem>0?{['gl_'+kidId]:todayStr()+':'+rem}:{['played_'+kidId]:todayStr(),['gl_'+kidId]:''});}host.hidden=true;host.innerHTML='';syncLock();const prev=Number(S.cfg['hs_'+kidId+'_bubble'])||0;if(score>prev){saveCfg({['hs_'+kidId+'_bubble']:score});toast('New best score: '+score+'!');}render();}});
   });
 }
 function render(){
@@ -2206,7 +2210,7 @@ document.addEventListener('click',e=>{
     case 'bonus-save':{const b=setF.bonus;if(b==null)break;safe(()=>saveCfg({bonus:b}),'Bonus saved').then(ok=>{if(ok){setF.bonus=null;renderParent();}});break;}
     case 'streak-step':{const cur=setF.streak==null?streakPts():setF.streak;setF.streak=clamp(cur+Number(el.dataset.d),0,5000);renderParent();break;}
     case 'games-once':safe(()=>saveCfg({gameOnce:!oncePerDay()}),oncePerDay()?'Kids can play as often as they like':'One play a day');break;
-    case 'games-again':safe(()=>saveCfg({['played_'+el.dataset.kid]:''}),'They can play again today');break;
+    case 'games-again':safe(()=>saveCfg({['played_'+el.dataset.kid]:'',['gl_'+el.dataset.kid]:''}),'They can play again today');break;
     case 'games-master':safe(()=>saveCfg({gamesOn:!gamesOn()}),gamesOn()?'Games turned off':'Games turned on');break;
     case 'game-fold':{const g=el.dataset.g;lsSet('cc_fold_game_'+g,lsGet('cc_fold_game_'+g,'0')==='1'?'0':'1');renderParent();break;}
     case 'game-step':{const f=el.dataset.f,g=gameForm(),d=Number(el.dataset.d),lim={mins:[1,60],extra:[1,30],cost:[1,100]}[f];setF.gm=Object.assign({},setF.gm||{},{[f]:clamp(g[f]+d,lim[0],lim[1])});renderParent();break;}

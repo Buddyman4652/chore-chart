@@ -214,7 +214,7 @@ function start(host,opts){
     if(dead)return;
     var s=Math.max(score,best>(opts.best||0)?best:0);
     destroy();
-    if(opts.onEnd)opts.onEnd(s);
+    if(opts.onEnd)opts.onEnd(s,Math.max(0,Math.round(timeLeft)));
   }
   function destroy(){
     dead=true;cancelAnimationFrame(raf);window.removeEventListener('resize',resize);
