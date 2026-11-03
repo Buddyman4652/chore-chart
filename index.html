@@ -501,7 +501,7 @@ button.gtotal{background:none;border:0;width:100%;font:inherit;color:inherit;cur
 </head><body>
 
 
-<div class="wrap"><div id="app"></div><p class="appver">Version 1.1 · saved on this iPad</p></div>
+<div class="wrap"><div id="app"></div><p class="appver">Version 1.2 · saved on this iPad</p></div>
 <div id="sheet" class="overlay" hidden></div>
 <div id="parent" class="overlay" hidden>
   <div class="ppanel">
@@ -522,6 +522,8 @@ button.gtotal{background:none;border:0;width:100%;font:inherit;color:inherit;cur
 <input id="photo-in" class="photoin" type="file" accept="image/*" tabindex="-1" aria-hidden="true">
 
 <script src="bubble.js"></script>
+<script src="puzzles.js"></script>
+<script src="daily.js"></script>
 <script>
 /* On-device backend for the chore chart. Gives the page the same small database API it used on Claude. */
 (function(){
@@ -1092,7 +1094,27 @@ function gamesStrip(k){
   }).join('');
   const done=playedToday(k.id)?'<p class="muted" style="margin:0 0 8px;font-weight:700">You played today. The arcade opens again tomorrow!</p>':'';
   const plays=REAL_GAMES().map(g=>playBtn(k,g)).join('');
-  return '<div class="gstrip"><h3 class="sec">Arcade</h3>'+done+'<ul class="gmlist" aria-label="Arcade">'+items+'</ul>'+(gamesOn()?plays:'')+'</div>';
+  return '<div class="gstrip"><h3 class="sec">Arcade</h3>'+done+'<ul class="gmlist" aria-label="Arcade">'+items+'</ul>'+(gamesOn()?plays:'')+dailyStrip(k)+'</div>';
+}
+/* Daily word puzzles: new each day, no unlocking, open once all of today's chores are done. One try a day each. */
+const DAILY=[['word','Word Guess','Guess the secret word'],['conn','Group Up','Sort 16 words into 4 groups'],['trail','Word Trail','Find the theme words in the grid']];
+function dailyState(kid,kind){try{const v=JSON.parse(S.cfg['dp_'+kid+'_'+kind]||'null');return v&&v.d===todayStr()?v:null;}catch(e){return null;}}
+function dailyStrip(k){
+  if(!gamesOn()||!window.DailyPuzzles)return '';
+  if(!allDoneToday(k))return '<h3 class="sec" style="margin-top:14px">Daily puzzles</h3><p class="muted gplay-note">Finish all of today\'s chores to play the daily puzzles.</p>';
+  return '<h3 class="sec" style="margin-top:14px">Daily puzzles</h3><p class="muted" style="margin:0 0 8px">New every day. You get one try at each.</p>'+DAILY.map(d=>{
+    const st=dailyState(k.id,d[0]),lab=st?(st.fin?'Finished today':'Keep going'):'New today';
+    return '<button type="button" class="btn'+(st&&st.fin?'':' primary')+' gplay" data-act="play-daily" data-kid="'+k.id+'" data-kind="'+d[0]+'">'+esc(d[1])+' · '+lab+'</button>';
+  }).join('');
+}
+function dailyStart(kidId,kind){
+  const k=KID[kidId];
+  if(!k||!window.DailyPuzzles||!gamesOn()||!allDoneToday(k)){toast('Not available right now.');return;}
+  const host=$('#arcade');host.hidden=false;syncLock();
+  const st=dailyState(kidId,kind);
+  window.DailyPuzzles.start(host,{kind,day:window.DailyPuzzles.dayNum(todayStr()),state:st?Object.assign({},st):null,
+    onSave:(s,fin)=>{saveCfg({['dp_'+kidId+'_'+kind]:JSON.stringify(Object.assign({},s,{d:todayStr(),fin:!!fin}))});},
+    onClose:()=>{host.hidden=true;host.innerHTML='';syncLock();render();}});
 }
 const gnum=(k,d)=>Number.isFinite(S.cfg[k])?S.cfg[k]:d;
 const TIER_OPTS=[[0,'At the start'],[7,'Day 7 box'],[14,'Day 14 box'],[21,'Day 21 box'],[28,'Day 28 box'],[-1,'Never']];
@@ -2241,6 +2263,7 @@ document.addEventListener('click',e=>{
     case 'bk-restore':{const f=$('#bk-in');if(f){f.value='';f.click();}break;}
     case 'wipe-all':{if(!confirm('Erase every chore, point, reward and photo on this iPad and start over? This cannot be undone. Save a backup first if you might want anything back.'))break;window.CCLOCAL.wipe().then(()=>location.reload());break;}
     case 'play-game':arcadeStart(el.dataset.kid,el.dataset.game);break;
+    case 'play-daily':dailyStart(el.dataset.kid,el.dataset.kind);break;
     case 'close-cel':closeCel();break;
   }
 });

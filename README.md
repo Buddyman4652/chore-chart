@@ -36,3 +36,6 @@ To release an update, change the files and push. Devices pick up the new version
 | `manifest.webmanifest`, `icon-*.png` | Home Screen icon and name |
 
 No build step and no dependencies. It is plain HTML and JavaScript. The only outside request is the Google Fonts stylesheet, and the app falls back to system fonts without it.
+
+## Daily puzzles
+Three new puzzles each day (Word Guess, Group Up, Word Trail) open once a kid has finished all of today's chores. No unlocking, no play-time clock, one try a day each.
